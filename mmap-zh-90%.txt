@@ -10,6 +10,15 @@ SYNOPSIS
                   int fd, off_t offset);
        int munmap(void *addr, size_t length);
 
+       PS：
+            进程可以发出一个mmap()系统调用来创建一个新的内存映射;
+            使用者必须要指定 MAP_SHARED或者MAP_PRIVATE flag作为mmap()的参数，前一种映射是共享的，后一种是私有的；
+            一旦创建了这种映射，进程就可以从这个新线性区的内存单元中读取数据，也就等价与读取了文件中存放的数据；
+            如果这个内存映射是共享的，那么进程可以通过对相同的内存单元进行写而达到修改相应文件的目的；
+            为了撤销或者缩小一个内存映射，进程可以使用munmap()系统调用；
+
+            同时，如果一个映射是共享的，那么相应的线性区就会设置为VM_SHARED标志；
+
        关于其他特殊的需求请参考NOTES;
 
 DESCRIPTION
@@ -74,37 +83,38 @@ DESCRIPTION
               该标志已被忽略  (很久以前，它被用于ETXTBUSY向磁盘文件写入的尝试应该失败.  But this was a source of denial-of-service attacks.)
 
        MAP_EXECUTABLE
-              This flag is ignored.
+              该标志已被忽略
 
        MAP_FILE
               Compatibility flag.  Ignored.
 
        MAP_FIXED
-              Don't interpret addr as a hint: place the mapping at exactly that address.  addr must be suitably aligned: for most architectures a multiple of the page size is sufficient; however,  some
-              architectures  may impose additional restrictions.  If the memory region specified by addr and len overlaps pages of any existing mapping(s), then the overlapped part of the existing map‐
-              ping(s) will be discarded.  If the specified address cannot be used, mmap() will fail.  Software that aspires to be portable should use this option with care, keeping  in  mind  that  the
-              exact layout of a process's memory mappings is allowed to change significantly between kernel versions, C library versions, and operating system releases.
+              不会将addr解释为"将映射放到那个地址" (同时 addr == NULL本来会被视为由内存指定，但是此时会将NULL作为0来分配);
+              Addr必须适当对齐:对于大多数的架构来说，page大小的倍数就足够了;(一些体系结构可能会拥有额外的限制)
+              如果addr和len指定的内存区域与现有的映射存在页面重叠，那么现有映射中重叠的部分将会被丢弃;如果指定的地址不能使用，mmap()会失败;
+              希望可移植的程序应该小心的使用这个选项，进程的内存映射的确切布局在不同的kernel版本、C库、操作系统版本中都会不同；
 
-              Furthermore,  this  option  is  extremely hazardous (when used on its own), because it forcibly removes preexisting mappings, making it easy for a multithreaded process to corrupt its own
-              address space.
+              这个选项非常危险，因为会删除之前存在的映射,在多线程进程中很容易会破坏自己的地址空间;
 
-              For example, thread A looks through /proc/<pid>/maps and locates an available address range, while thread B simultaneously acquires part or all of that same address range.  Thread A  then
-              calls mmap(MAP_FIXED), effectively overwriting the mapping that thread B created.
+              例如: 线程A将/proc/<pid>/maps 定位到一个可用的地址范围,而线程B同时获得相同的地址范围的部分或者全部;
+                    然后线程A调用了mmap(MAP_FIXED)，就会覆盖掉线程B创建的映射;
 
-              Thread  B  need  not create a mapping directly; simply making a library call that, internally, uses dlopen(3) to load some other shared library, will suffice.  The dlopen(3) call will map
-              the library into the process's address space.  Furthermore, almost any library call may be implemented in a way that adds memory mappings to the address space, either with this technique,
-              or by simply allocating memory.  Examples include brk(2), malloc(3), pthread_create(3), and the PAM libraries ⟨http://www.linux-pam.org⟩.
+              线程B不需要直接创建映射;只需要在内部调用一个库,使用dlopen(3)加载其他一些共享库就足够了;
+              dlopen(3)调用将库映射到进程的地址空间;此外任何库调用都可以通过内存映射添加到地址空间的方式实现,可以使用这种技术,也可以简单的分配内存。
+              Examples include brk(2), malloc(3), pthread_create(3), and the PAM libraries ⟨http://www.linux-pam.org⟩.
 
        MAP_GROWSDOWN
-              This  flag  is  used for stacks.  It indicates to the kernel virtual memory system that the mapping should extend downward in memory.  The return address is one page lower than the memory
-              area that is actually created in the process's virtual address space.  Touching an address in the "guard" page below the mapping will cause the mapping to grow by a page.  This growth can
-              be repeated until the mapping grows to within a page of the high end of the next lower mapping, at which point touching the "guard" page will result in a SIGSEGV signal.
+              用于标记堆栈;这个flag指示kernel虚拟内存系统，映射应该在内存中向下扩展；
+              返回地址比进程的虚拟地址空间中实际创建的内存区域低one page;
+              当Touch到映射下方的一个"guard"page中的一个地址会导致映射增长一个页面;
+              这种增长可以重复，直到映射只知道下一个较低映射的高页面,此时touch "guard" page会触发SIGSEGV信号
 
        MAP_HUGETLB (since Linux 2.6.32)
-              Allocate the mapping using "huge pages."  See the Linux kernel source file Documentation/vm/hugetlbpage.txt for further information, as well as NOTES, below.
+              标志使用"huge pages"完成映射;
+              See the Linux kernel source file Documentation/vm/hugetlbpage.txt for further information, as well as NOTES, below.
 
        MAP_HUGE_2MB, MAP_HUGE_1GB (since Linux 3.8)
-              Used in conjunction with MAP_HUGETLB to select alternative hugetlb page sizes (respectively, 2 MB and 1 GB) on systems that support multiple hugetlb page sizes.
+              配合MAP_HUGETLB一起使用,在支持多种hugetlb page sizes的系统上选择不同的hugetlb page sizes (respectively, 2 MB and 1 GB)
 
               More  generally,  the desired huge page size can be configured by encoding the base-2 logarithm of the desired page size in the six bits at the offset MAP_HUGE_SHIFT.  (A value of zero in
               this bit field provides the default huge page size; the default huge page size can be discovered vie the Hugepagesize field exposed by /proc/meminfo.)  Thus, the above two  constants  are
@@ -113,7 +123,7 @@ DESCRIPTION
                   #define MAP_HUGE_2MB    (21 << MAP_HUGE_SHIFT)
                   #define MAP_HUGE_1GB    (30 << MAP_HUGE_SHIFT)
 
-              The range of huge page sizes that are supported by the system can be discovered by listing the subdirectories in /sys/kernel/mm/hugepages.
+              系统支持的 huge page sizes在 /sys/kernel/mm/hugepages.
 
        MAP_LOCKED (since Linux 2.5.37)
               Mark  the mapped region to be locked in the same way as mlock(2).  This implementation will try to populate (prefault) the whole range but the mmap() call doesn't fail with ENOMEM if this
@@ -121,8 +131,10 @@ DESCRIPTION
               initialization of the mapping.  The MAP_LOCKED flag is ignored in older kernels.
 
        MAP_NONBLOCK (since Linux 2.5.46)
-              This  flag  is meaningful only in conjunction with MAP_POPULATE.  Don't perform read-ahead: create page tables entries only for pages that are already present in RAM.  Since Linux 2.6.23,
-              this flag causes MAP_POPULATE to do nothing.  One day, the combination of MAP_POPULATE and MAP_NONBLOCK may be reimplemented.
+              该标志只有在与MAP_POPULATE一起使用的时候才有意义;
+              标志不要执行预读操作,只为内存中已经存在的页面创建页表目录
+              从Linux 2.6.23开始，这个标志将导致MAP_POPULATE无效;
+              One day, the combination of MAP_POPULATE and MAP_NONBLOCK may be reimplemented.
 
        MAP_NORESERVE
               Do not reserve swap space for this mapping.  When swap space is reserved, one has the guarantee that it is possible to modify the mapping.  When swap space is not reserved one  might  get
@@ -130,59 +142,69 @@ DESCRIPTION
               for private writable mappings.
 
        MAP_POPULATE (since Linux 2.5.46)
-              Populate (prefault) page tables for a mapping.  For a file mapping, this causes read-ahead on the file.  This will help to reduce blocking on page faults later.  MAP_POPULATE is supported
-              for private mappings only since Linux 2.6.23.
+              为映射填充(预先)页表,对于文件映射会导致对文件进行预读,这会有助于减少以后对页面错误的阻塞。
+              从Linux 2.6.23开始，才被Pirvate mappings支持
 
        MAP_STACK (since Linux 2.6.27)
-              Allocate the mapping at an address suitable for a process or thread stack.  This flag is currently a no-op, but is used in the glibc threading implementation so that if some architectures
-              require special treatment for stack allocations, support can later be transparently implemented for glibc.
+              再适合进程或者线程堆栈的地址分配映射；
+              该标志目前是no-op，但是在glibc线程实现中使用,因此一些体系结构需要对堆栈分配进行特殊处理，可以稍后透明的实现对glibc的支持
 
        MAP_UNINITIALIZED (since Linux 2.6.33)
-              Don't clear anonymous pages.  This flag is intended to improve performance on embedded devices.  This flag is honored only if the kernel was configured with  the  CONFIG_MMAP_ALLOW_UNINI‐
-              TIALIZED option.  Because of the security implications, that option is normally enabled only on embedded devices (i.e., devices where one has complete control of the contents of user mem‐
-              ory).
+              不要清除匿名页面;
+              该标志用于提高嵌入式设备的性能.只有当内核配置了 CONFIG_MMAP_ALLOW_UNINI‐TIALIZED时才会被视为有效;
+              出于安全考虑，该选项只有在嵌入式设备(完全控制用户内存内容的设备)中启用
 
-       Of the above flags, only MAP_FIXED is specified in POSIX.1-2001 and POSIX.1-2008.  However, most systems also support MAP_ANONYMOUS (or its synonym MAP_ANON).
+       在上述的flags中，只有MAP_FIXED 在POSIX.1-2001 and POSIX.1-2008中被规定;
+       然而大多数设备也支持 MAP_ANONYMOUS (或者同义词MAP_ANON);
 
-       Memory mapped by mmap() is preserved across fork(2), with the same attributes.
+       mmap()映射的内存在fork(2)中保留,具有相同的属性;
 
-       A file is mapped in multiples of the page size.  For a file that is not a multiple of the page size, the remaining memory is zeroed when mapped, and writes to that region are not written out  to
-       the file.  The effect of changing the size of the underlying file of a mapping on the pages that correspond to added or removed regions of the file is unspecified.
+       文件会被映射为page大小的倍数;对于不是page倍数大小的文件，在映射时会分配足够大的页,并且在对这块区域写的时候不会写入到文件中；
+       修改 与文件增删区域相关的页 上映射的磁盘文件的的大小 所造成的影响是未知的；
 
    munmap()
-       The  munmap()  system call deletes the mappings for the specified address range, and causes further references to addresses within the range to generate invalid memory references.  The region is
-       also automatically unmapped when the process is terminated.  On the other hand, closing the file descriptor does not unmap the region.
+       munmap()系统调用会删除指定地址范围的映射,并导致对该分为上地址的进一步的引用会产生无效的内存引用(invalid memory references);
+       当进程终止时，区域也会自动取消映射;另一方面，关闭文件描述符并不会取消该区域的映射;
 
-       The address addr must be a multiple of the page size (but length need not be).  All pages containing a part of the indicated range are unmapped, and subsequent references  to  these  pages  will
-       generate SIGSEGV.  It is not an error if the indicated range does not contain any mapped pages.
+       addr地址必须是页面大小的倍数(但是长度不需要);所有包含指定范围的一部分的page都是unmapped，并且对这些page的后续引用都会产生SIGSEGV;
+       如果指定的范围不包含任何mapped page，则不会报错.
 
-RETURN VALUE
-       On success, mmap() returns a pointer to the mapped area.  On error, the value MAP_FAILED (that is, (void *) -1) is returned, and errno is set to indicate the cause of the error.
+       PS:
+            当进程需要撤销一个内存映射时，就需要调用munmap()；该系统调用还可以用于减少每种内存区的大小;
+            传递的参数如下:
+                · 要删除的线性地址区间中的第一个单元的地址;
+                · 要删除的线性地址区间的长度;
+            该系统调用的sys_munmap()服务例程实际上是调用了do_munmap()函数;
+            注意的是:不需要将待撤销科协共享内存映射中的页刷新到磁盘中;
+                     实际上这些页仍然在页高速缓存中，一次继续起着磁盘高速缓存的作用;
 
-       On success, munmap() returns 0.  On failure, it returns -1, and errno is set to indicate the cause of the error (probably to EINVAL).
+RETURN VALUE(返回值)
+       如果成功执行,mmap()会返回一个指向映射区域的指针;如果发生错误，会返回MAP_FAILED ((void *)-1)，并设置errno来指示错误的原因；
 
-ERRORS
-       EACCES A file descriptor refers to a non-regular file.  Or a file mapping was requested, but fd is not open for reading.  Or MAP_SHARED was requested and PROT_WRITE is set, but fd is not open in
-              read/write (O_RDWR) mode.  Or PROT_WRITE is set, but the file is append-only.
+       如果成功执行,munmap()会返回0;如果失败会返回-1,并设置errno来指示错误的原因(probably to EINVAL)
 
-       EAGAIN The file has been locked, or too much memory has been locked (see setrlimit(2)).
+ERRORS  (错误)
+       EACCES 表示文件描述符fd指的是非常规文件,或者是请求了一个文件映射,但是fd没有被打开;
+              或者请求MAP_SHARED并且设置了PROT_WRITE,但是fd没有在读写模式(O_RDWR)下打开;
+              或者是设置了PROT_WRITE,但是文件是append-only的；
 
-       EBADF  fd is not a valid file descriptor (and MAP_ANONYMOUS was not set).
+       EAGAIN 文件被锁定或者太多的内存被锁定(see setrlimit(2)).
 
-       EINVAL We don't like addr, length, or offset (e.g., they are too large, or not aligned on a page boundary).
+       EBADF  fd 不是一个有效的文件描述符 (并且没有设置 MAP_ANONYMOUS).
 
-       EINVAL (since Linux 2.6.12) length was 0.
+       EINVAL addr, length, or offset错误 (例如:  too large, or 没有对于page边界对齐).
 
-       EINVAL flags contained neither MAP_PRIVATE or MAP_SHARED, or contained both of these values.
+       EINVAL Linux2.6.12之后lenght == 0 .
 
-       ENFILE The system-wide limit on the total number of open files has been reached.
+       EINVAL flags中没有 MAP_PRIVATE or MAP_SHARED, or 两个都存在.
 
-       ENODEV The underlying filesystem of the specified file does not support memory mapping.
+       ENFILE 已达到系统范围内可打开的文件总数的限制.
 
-       ENOMEM No memory is available.
+       ENODEV 文件系统不支持内存映射.
 
-       ENOMEM The process's maximum number of mappings would have been exceeded.  This error can also occur for munmap(), when unmapping a region in the  middle  of  an  existing  mapping,  since  this
-              results in two smaller mappings on either side of the region being unmapped.
+       ENOMEM 没有可用内存.
+
+       ENOMEM 超过了进程的最大映射数;对于munmap(),当现有映射的中间取消映射一个区域时也会发生这个错误,因为会导致两次的两个映射被取消映射;
 
        ENOMEM (since Linux 4.7) The process's RLIMIT_DATA limit, described in getrlimit(2), would have been exceeded.
 
@@ -190,20 +212,19 @@ ERRORS
               On  32-bit architecture together with the large file extension (i.e., using 64-bit off_t): the number of pages used for length plus number of pages used for offset would overflow unsigned
               long (32 bits).
 
-       EPERM  The prot argument asks for PROT_EXEC but the mapped area belongs to a file on a filesystem that was mounted no-exec.
+       EPERM  prot参数请求PROT_EXEC,但是映射区域属于一个非exec挂载的文件系统上的文件.
 
        EPERM  The operation was prevented by a file seal; see fcntl(2).
 
        ETXTBSY
               MAP_DENYWRITE was set but the object specified by fd is open for writing.
 
-       Use of a mapped region can result in these signals:
+       使用映射区域可能会产生的信号:
 
        SIGSEGV
-              Attempted write into a region mapped as read-only.
+              试图对一个只读区域写入.
 
-       SIGBUS Attempted access to a portion of the buffer that does not correspond to the file (for example, beyond the end of the file, including the case  where  another  process  has  truncated  the
-              file).
+       SIGBUS 尝试访问与文件对应的缓冲区部分(例如: 超出文件末尾,包括另一个进程截断文件).
 
 ATTRIBUTES
        For an explanation of the terms used in this section, see attributes(7).
@@ -220,35 +241,34 @@ AVAILABILITY
        On POSIX systems on which mmap(), msync(2), and munmap() are available, _POSIX_MAPPED_FILES is defined in <unistd.h> to a value greater than 0.  (See also sysconf(3).)
 
 NOTES
-       On  some  hardware  architectures  (e.g.,  i386),  PROT_WRITE  implies  PROT_READ.   It is architecture dependent whether PROT_READ implies PROT_EXEC or not.  Portable programs should always set
-       PROT_EXEC if they intend to execute code in the new mapping.
+       某些硬件架构(如 i386)中,PROT_WRITE会隐含着PROT_READ; PROT_READ是否包含 PROT_EXEC取决于体系结构;
+       如果想让程序可移植性强，应该在打算执行新映射的代码中时钟设置 PROT_EXEC;
 
-       The portable way to create a mapping is to specify addr as 0 (NULL), and omit MAP_FIXED from flags.  In this case, the system chooses the address for the mapping; the address is chosen so as not
-       to conflict with any existing mapping, and will not be 0.  If the MAP_FIXED flag is specified, and addr is 0 (NULL), then the mapped address will be 0 (NULL).
+       让创建映射拥有可移植性的方法是将addr指定为0(NULL),并从标志中省略MAP_FIXED(该flag会覆盖之前的映射);
+       在这种情况下，系统会为映射选择地址;选择的地址不会与现有的映射存在冲突，并且不会为0;
+       如果指定了MAP_FIXED,并且addr是0(NULL),那么映射的地址将会是0(NULL)
 
        Certain flags constants are defined only if suitable feature test macros are defined (possibly by default): _DEFAULT_SOURCE with glibc 2.19 or later; or _BSD_SOURCE or _SVID_SOURCE in glibc 2.19
        and earlier.  (Employing _GNU_SOURCE also suffices, and requiring that macro specifically would have been more logical, since these flags  are  all  Linux-specific.)   The  relevant  flags  are:
        MAP_32BIT, MAP_ANONYMOUS (and the synonym MAP_ANON), MAP_DENYWRITE, MAP_EXECUTABLE, MAP_FILE, MAP_GROWSDOWN, MAP_HUGETLB, MAP_LOCKED, MAP_NONBLOCK, MAP_NORESERVE, MAP_POPULATE, and MAP_STACK.
 
-       An application can determine which pages of a mapping are currently resident in the buffer/page cache using mincore(2).
+       可以使用mincore(2)来确定映射的哪些页面当前驻留在缓冲区/页面缓冲区.
 
-   Timestamps changes for file-backed mappings
-       For  file-backed  mappings, the st_atime field for the mapped file may be updated at any time between the mmap() and the corresponding unmapping; the first reference to a mapped page will update
-       the field if it has not been already.
+   file-backed映射的的timestamps修改
+       对于  file-backed  mappings, 映射文件的st_atime字段可以在mmap()和相应的unmapping之间随时更新;
+       对映射page的第一个引用会更新字段(如果还没有被更新的话);
 
-       The st_ctime and st_mtime field for a file mapped with PROT_WRITE and MAP_SHARED will be updated after a write to the mapped region, and before a subsequent msync(2) with the MS_SYNC or MS_ASYNC
-       flag, if one occurs.
+       对于使用PROT_WRITE 和 MAP_SHARED映射的文件 st_ctime and st_mtime 字段将会在写操作之后，以及随后的一次flag为MS_SYNC 或者 MS_ASYNC的msync(2)之前被更新;
 
    Huge page (Huge TLB) mappings
-       For mappings that employ huge pages, the requirements for the arguments of mmap() and munmap() differ somewhat from the requirements for mappings that use the native system page size.
+       对于使用huge page的映射,对mmap()和munmap()参数的要求与使用的本级系统的page大小的映射要求有些不同;
 
-       For mmap(), offset must be a multiple of the underlying huge page size.  The system automatically aligns length to be a multiple of the underlying huge page size.
+       For mmap(), offset必须是底层huge page大小的倍数;系统会自动将长度对齐到底层huge page的倍数;
 
-       For munmap(), addr and length must both be a multiple of the underlying huge page size.
+       For munmap(), addr and length 都必须是huge page的倍数
 
    C library/kernel differences
-       This  page  describes the interface provided by the glibc mmap() wrapper function.  Originally, this function invoked a system call of the same name.  Since kernel 2.4, that system call has been
-       superseded by mmap2(2), and nowadays the glibc mmap() wrapper function invokes mmap2(2) with a suitably adjusted value for offset.
+       glibc mmap()调用了一个同名的系统调用,自从kernel 2.4以来,这个系统调用已经内mmap2(2)所取代,现在glibc mmap()调用mmap2()时使用适当调整的偏移量.
 
 BUGS
        On Linux, there are no guarantees like those suggested above under MAP_NORESERVE.  By default, any process can be killed at any moment when the system runs out of memory.
@@ -352,3 +372,44 @@ COLOPHON
        https://www.kernel.org/doc/man-pages/.
 
 Linux                                                                                           2017-12-18                                                                                        MMAP(2)
+
+
+
+PS  (总结)
+   create
+       void *mmap(void *addr, size_t length, int prot, int flags,int fd, off_t offset);
+       创建一个新的内存映射,进程需要发送一个mmap()系统调用,并向该函数传递一下参数:
+        · 文件描述符fd，标识要映射的文件;
+        · 文件内的偏移量,指定要映射的文件部分的第一个字符;
+        · 要映射的文件部分的长度;
+        · 一组flags;进程必须显示的设置MAP_SHARED 或者 MAP_PRIVATE标识来指定所请求的内存映射的种类;
+        · 一组prot;指定对线性区进行访问的一种或者多种权限: 读(PROT_READ)、写(PROT_WRITE)、执行(PROT_EXEC);
+        · 一个可选的线性地址，kernel吧改地址作为新线性区应该从哪里开始的一个线索;如果指定了MAP_FIXED标志且kernel不能从指定的addr开始分配新线性区，那么这个系统调用会失败;
+
+       mmap()系统调用返回新线性区中第一个单元位置的线性地址;最终会调用do-mmap-pgoff()函数；
+
+       do-mmap-pgoff()：
+        1. 检查映射的文件是否定义了mmap文件操作;如果没有，直接返回错误;
+           文件操作表在的mmap值 == NULL说明该文件不可被映射(例如 这是一个目录);
+        
+        2. 函数get_unmapped_area()调用文件对象的 get_unmapped_area方法，如果已经定义，就为文件的内存映射分配一个合适的线性地址区间；
+           
+        3. 除了进行正常的一致性检查以外，还要对所请求的内存映射的种类(存放在mmap()系统调用的flags参数中) 与 打开文件时指定的标志(存放在file -->f-mode字段中) 进行比较;
+            · 如果请求一个共享可写的内存映射,就检查文件是否为写入打开，而不是追加模式打开的;
+            · 如果请求一个共享内存映射，就检查文件上是否有强制锁;
+            · 对于任何种类的内存映射,都要检查文件是否有读的权限;
+           如果上述条件都不能满足，就要返回一个错误码；
+
+           另外在初始化线性区描述符的vm_flags字段时，要根据文件的访问权限和所请求的内存映射的种类设置VM_READ、VM_WEITE、VM_EXEC、VM_SHARED、VM_MAYREAD、VM_MAYWRITE、VM_MAYEXEC和VM_MAYSHARE标志；
+           最佳情况下，对于不可写共享内存映射，标志VM_SHARED、WM_MAYWRITE清0;这样处理是为了不允许进程写入这个线性区的页，一次这种映射的处理就与私有映射的处理相同；但是kernel实际上允许共享该文件的其他进程读这个线性区的页;
+
+        4. 用文件对象的地址初始化线性区描述符的vm_file字段，并增加文件的计数器;
+           对于映射到文件调用mmap方法，将文件对象地址和线性区描述符作为参数传给它;对于大多数文件系统，该方法由generic_file_mmap()实现:
+            · 将当前时间付给文件索引节点对象的 i_atime字段，并将该索引节点标记位脏;
+            · 用 generic_file_vm_ops表的地址初始化线性区描述符的vm_ops字段。
+              在这个表中的方法，除了nopage和populate方法外，其他所有都为空。
+              nopage方法由filemap_nopage()实现，而populate方法由filemap_populate()实现
+
+        5. 增加文件索引节点对象 i_writecount字段的值，也就是写进程的引用计数器；
+
+   paging
